@@ -7,10 +7,44 @@
    pip install -e .
    ```
 
-2. Set up the necessary environment variables:
+2. Wget MoleculeSTM & vicuna
+   ```
+   mkdir models
+   cd models
+
+   mkdir MoleculeSTM
+   wget https://huggingface.co/chao1224/MoleculeSTM/resolve/main/demo/demo_checkpoints_Graph/molecule_model.pth -P MoleculeSTM
+   cd ..
+
+   git lfs install 
+   GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/lmsys/vicuna-7b-v1.5
+   git lfs pull
+   ```
+
+3. Set up the necessary environment variables:
    ```
    export MOLECULE_2D_PATH="/path/to/MoleculeSTM/"
    export WANDB_API_KEY="your_wandb_api_key"
+   ```
+
+4. Prepare data
+   ```
+   mkdir datasets
+   git lfs install
+   git clone https://huggingface.co/datasets/OpenMol/PubChem_G2S_300K_SMILES-MMPretrain
+   git clone https://huggingface.co/datasets/OpenMol/USPTO_RXN_Interleaved
+   git clone https://huggingface.co/datasets/OpenMol/BH-SM_YR_10K-MMChat
+   git clone https://huggingface.co/datasets/OpenMol/MolInst_FS_125K_SMILES-MMChat
+   git clone https://huggingface.co/datasets/OpenMol/MolInst_RS_125K_SMILES-MMChat
+   git clone https://huggingface.co/datasets/OpenMol/MolInst_FS_125K_SMILES-MMChat
+   git clone https://huggingface.co/datasets/OpenMol/HTE_RAS_4K-MMChat
+   git clone https://huggingface.co/datasets/OpenMol/RCR_RP_57K_SMILES-MMChat
+   git clone https://huggingface.co/datasets/OpenMol/RCR_SP_70K_SMILES-MMChat
+   git clone https://huggingface.co/datasets/OpenMol/RCR_CP_10K_SMILES-MMChat
+   git clone https://huggingface.co/datasets/OpenMol/SMol_S2F_270K-MMChat
+   git clone https://huggingface.co/datasets/OpenMol/SMol_S2I_270K-MMChat
+   git clone https://huggingface.co/datasets/OpenMol/SMol_I2S_270K-MMChat
+   git clone https://huggingface.co/datasets/OpenMol/SMol_I2F_270K-MMChat
    ```
 
 ## Pretraining
