@@ -14,13 +14,7 @@ MODEL_CLS=LlamaLMMForCausalLM
 # output path
 OUTPUT_DIR="checkpoints/sft/llava-moleculestm-$MODEL_VERSION-sft-trans"
 
-# NUM_GPUS=8
-# deepspeed --num_gpus=$NUM_GPUS scripts/train_model.py \
-# CUDA_VISIBLE_DEVICES=1,3 deepspeed scripts/train_model.py \
-# deepspeed --include "1,3" scripts/train_model.py \
-# deepspeed --include "worker:1,3" scripts/train_model.py \
-
-deepspeed --include localhost:1,3 scripts/train_model.py \
+deepspeed --include localhost:2,3 scripts/train_model.py \
     --model_name_or_path $BASE_LLM_PATH \
     --model_cls $MODEL_CLS \
     --modality_builder molecule_2d \
@@ -31,8 +25,8 @@ deepspeed --include localhost:1,3 scripts/train_model.py \
     --tf32 True \
     --num_train_epochs 1 \
     --gradient_checkpointing True \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 4 \
+    --per_device_train_batch_size 2 \
+    --per_device_eval_batch_size 2 \
     --gradient_accumulation_steps 2 \
     --model_max_length 2048 \
     --evaluation_strategy "no" \

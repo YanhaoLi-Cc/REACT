@@ -155,50 +155,48 @@ def load_model_and_tokenizer_for_training(
         cache_dir=training_args.cache_dir,
         model_max_length=training_args.model_max_length,
         padding_side="right",
-        use_fast=False
+        use_fast=False,
     )
     fix_tokenizer(tokenizer)
 
-    # 加载配置
-    config = AutoConfig.from_pretrained(
-        model_args.model_name_or_path,
-        cache_dir=training_args.cache_dir,
-    )
-    
-    # 使用DeepSpeed初始化模型
-    if training_args.deepspeed:
-        with deepspeed.zero.Init(config_dict_or_path=training_args.deepspeed):
-            model = model_cls(config)
-            
-            # 如果存在预训练权重，加载它们
-            if os.path.exists(os.path.join(model_args.model_name_or_path, "pytorch_model.bin")):
-                state_dict = torch.load(
-                    os.path.join(model_args.model_name_or_path, "pytorch_model.bin"),
-                    map_location="cpu"
-                )
-                # 加载权重
-                missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-                logging.info(f"Missing keys: {missing_keys}")
-                logging.info(f"Unexpected keys: {unexpected_keys}")
+    # 检查是否使用DeepSpeed ZeRO-3
+    is_deepspeed_zero3 = False
+    if hasattr(training_args, "deepspeed") and training_args.deepspeed:
+        import json
+        with open(training_args.deepspeed) as f:
+            ds_config = json.load(f)
+        if "zero_optimization" in ds_config and ds_config["zero_optimization"].get("stage") == 3:
+            is_deepspeed_zero3 = True
+            logging.info("DeepSpeed ZeRO-3 detected, using special model loading procedure")
+
+    # 针对DeepSpeed ZeRO-3优化模型加载过程
+    if is_deepspeed_zero3:
+        # 首先在非分布式模式下加载配置
+        config = AutoConfig.from_pretrained(
+            model_args.model_name_or_path,
+            cache_dir=training_args.cache_dir,
+        )
+        # 确保使用原始配置的vocab_size和hidden_size
+        logging.info(f"Model config vocab_size: {config.vocab_size}, hidden_size: {config.hidden_size}")
+        
+        # 接下来使用DeepSpeed加载模型
+        model = model_cls.from_pretrained(
+            model_args.model_name_or_path,
+            config=config,
+            cache_dir=training_args.cache_dir,
+        )
     else:
-        # 如果不使用DeepSpeed，正常加载模型
+        # 常规模型加载
         model = model_cls.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=training_args.cache_dir,
-            use_flash_attention_2=True
         )
-        
 
-    # model = model_cls.from_pretrained(
-    #     model_args.model_name_or_path,
-    #     cache_dir=training_args.cache_dir,
-    #     use_flash_attention_2=True
-    # )
     model.modalities = modalities
     model.config.use_cache = False
     model.config.model_cls = model_cls.__name__
     model.config.modality_builder = model_args.modality_builder
-
+        
     if training_args.gradient_checkpointing:
         if hasattr(model, "enable_input_require_grads"):
             model.enable_input_require_grads()
@@ -236,15 +234,5 @@ def load_model_and_tokenizer_for_training(
             proj = getattr(model.get_model(), m.name + "_lmm_projector")
             for p in proj.parameters():
                 p.requires_grad = True
-
-    # 打印调试信息
-    logging.info(f"Model configuration: {model.config}")
-    logging.info(f"Tokenizer vocabulary size: {len(tokenizer)}")
-    
-    if hasattr(model, "get_model"):
-        base_model = model.get_model()
-        if hasattr(base_model, "embed_tokens"):
-            logging.info(f"Embedding layer shape: {base_model.embed_tokens.weight.shape}")
-
 
     return model, tokenizer

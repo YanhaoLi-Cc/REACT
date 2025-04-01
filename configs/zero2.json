@@ -18,6 +18,47 @@
         "overlap_comm": true,
         "contiguous_gradients": true,
         "sub_group_size": 1e9,
-        "reduce_bucket_size": "auto"
-    }
+        "reduce_bucket_size": 5e8,
+        "allgather_bucket_size": 5e8,
+        "allgather_partitions": true,
+        "round_robin_gradients": true,
+        "offload_optimizer": {
+            "device": "cpu",
+            "pin_memory": true
+        },
+        "offload_param": {
+            "device": "cpu",
+            "pin_memory": true
+        }
+    },
+    "gradient_clipping": 1.0,
+    "gradient_accumulation_fusion": true,
+    "optimizer": {
+        "type": "AdamW",
+        "params": {
+            "lr": "auto",
+            "betas": "auto",
+            "eps": 1e-8,
+            "weight_decay": "auto"
+        }
+    },
+    "scheduler": {
+        "type": "WarmupDecayLR",
+        "params": {
+            "warmup_min_lr": 0,
+            "warmup_max_lr": "auto",
+            "warmup_num_steps": "auto",
+            "total_num_steps": "auto"
+        }
+    },
+    "activation_checkpointing": {
+        "partition_activations": true,
+        "cpu_checkpointing": true,
+        "contiguous_memory_optimization": true,
+        "number_checkpoints": null,
+        "synchronize_checkpoint_boundary": false,
+        "profile": false
+    },
+    "steps_per_print": 10,
+    "wall_clock_breakdown": false
 }

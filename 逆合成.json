@@ -1,0 +1,68 @@
+[
+    {
+        "id": 0,
+        "molecules": {
+            "selfies": [
+                "[C][O][C][=C][Branch1][C][N][C][=C][C][=C][Ring1][#Branch1][C][C][C][C][Branch1][=Branch2][N][C][C][O][C][C][Ring1][=Branch1][C][Ring1][=N]"
+            ],
+            "smiles": [
+                "COc1c(N)ccc2c1CCCC(N1CCOCC1)C2"
+            ]
+        },
+        "ground_truth": "COC1=C([N+1](=O)[O-1])C=CC2=C1CCCC(N3CCOCC3)C2",
+        "messages": [
+            {
+                "content": "You are a chemist. Now you are given a product molecule. Please predict the the reactant molecules of the reaction.\nThe reaction equation has the following format:\n```\nreactant1.reactant2. ... .reactantN>>product\n```\nYour task is to predict the structure representation of the reactant molecule. We provide the SMILES of the reactants.",
+                "role": "system"
+            },
+            {
+                "content": "What reactants could lead to the production of the following product? <molecule_2d>",
+                "role": "user"
+            }
+        ]
+    },
+    {
+        "id": 1,
+        "molecules": {
+            "selfies": [
+                "[C][C][C][N][C][Branch1][Ring2][C][O][C][=N][C][=C][Branch1][C][N][N][=C][C][=C][C][Branch1][N][O][C][C][N][C][C][C][C][C][Ring1][=Branch1][=C][C][Ring1][#C][=C][Ring2][Ring1][Ring2][Ring2][Ring1][#Branch2]"
+            ],
+            "smiles": [
+                "CCCn1c(COC)nc2c(N)nc3ccc(OCCN4CCCCC4)cc3c21"
+            ]
+        },
+        "ground_truth": "CCCN1C(COC)=NC2=C(N)N=C3C=CC(O)=CC3=C21.ClCCN4CCCCC4",
+        "messages": [
+            {
+                "content": "You are a chemist. Now you are given a product molecule. Please predict the the reactant molecules of the reaction.\nThe reaction equation has the following format:\n```\nreactant1.reactant2. ... .reactantN>>product\n```\nYour task is to predict the structure representation of the reactant molecule. We provide the SMILES of the reactants.",
+                "role": "system"
+            },
+            {
+                "content": "Based on the given product, provide some plausible reactants that might have been utilized to prepare it. <molecule_2d>",
+                "role": "user"
+            }
+        ]
+    },
+    {
+        "id": 2,
+        "molecules": {
+            "selfies": [
+                "[C][O][C][=C][C][=C][Branch1][Ring1][C][#N][C][=C][Ring1][Branch2][S][=Branch1][C][=O][=Branch1][C][=O][N][C][C][C][=C][C][=C][Branch1][P][C][=C][C][=C][C][=C][Ring1][=Branch1][S][Branch1][C][C][=Branch1][C][=O][=O][C][=C][Ring1][S][O]"
+            ],
+            "smiles": [
+                "COc1ccc(C#N)cc1S(=O)(=O)NCCc1ccc(-c2ccccc2S(C)(=O)=O)cc1O"
+            ]
+        },
+        "ground_truth": "COCOC1=CC(C2=CC=CC=C2S(C)(=O)=O)=CC=C1CCNS(=O)(=O)C3=CC(C#N)=CC=C3OC",
+        "messages": [
+            {
+                "content": "You are a chemist. Now you are given a product molecule. Please predict the the reactant molecules of the reaction.\nThe reaction equation has the following format:\n```\nreactant1.reactant2. ... .reactantN>>product\n```\nYour task is to predict the structure representation of the reactant molecule. We provide the SMILES of the reactants.",
+                "role": "system"
+            },
+            {
+                "content": "Based on the given product, provide some plausible reactants that might have been utilized to prepare it. <molecule_2d>",
+                "role": "user"
+            }
+        ]
+    }
+]

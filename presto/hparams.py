@@ -91,6 +91,10 @@ class TrainingArguments(transformers.TrainingArguments):
         default=1024,
         metadata={"help": "The maximum length of the entire input sequence for DPO training"}
     )
+    skip_modality_processing: bool = field(
+        default=False,
+        metadata={"help": "Skip modality data processing and treat all inputs as plain text, useful for DPO training"}
+    )
 
 
 @dataclass

@@ -30,7 +30,18 @@ if __name__ == "__main__":
     )
     print(data_args)
 
-    modalities = MODALITY_BUILDERS[model_args.modality_builder]()
+    # 如果skip_modality_processing为True且未指定modality_builder，使用空模态列表
+    if getattr(training_args, "skip_modality_processing", False) and not hasattr(model_args, "modality_builder"):
+        logging.info("Skip modality processing enabled and no modality builder specified, using empty modality list")
+        modalities = []
+    # 如果跳过模态处理但提供了modality_builder，发出警告但仍使用空列表
+    elif getattr(training_args, "skip_modality_processing", False):
+        logging.warning("Skip modality processing enabled but modality builder specified, ignoring modality builder")
+        modalities = []
+    # 常规情况，使用指定的modality_builder
+    else:
+        modalities = MODALITY_BUILDERS[model_args.modality_builder]()
+    
     model_cls = LANGUAGE_MODEL_NAME_TO_CLASS[model_args.model_cls]
 
     train_for_modalities(model_cls, training_args, model_args, modalities)

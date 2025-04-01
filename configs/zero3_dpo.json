@@ -23,8 +23,12 @@
         "stage3_param_persistence_threshold": 10000,
         "stage3_max_live_parameters": 1e9,
         "stage3_max_reuse_distance": 1e9,
+        "stage3_gather_16bit_weights_on_model_save": true,
         "gather_16bit_weights_on_model_save": true,
         "round_robin_gradients": true,
+        "dp_g_clipping": true,
+        "stage3_ckpt_load_enabled": true,
+        "reduce_scatter": true,
         "offload_optimizer": {
             "device": "cpu",
             "pin_memory": true
@@ -66,5 +70,6 @@
         "profile": false
     },
     "steps_per_print": 10,
-    "wall_clock_breakdown": false
-}
+    "wall_clock_breakdown": false,
+    "gradient_accumulation_fusion": true
+} 

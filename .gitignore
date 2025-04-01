@@ -163,20 +163,21 @@ cython_debug/
 wandb/
 
 # Log files
-*logs/
+# *logs/
 
 # Checkpoints
 checkpoints/
 
 deep-test/
 figure/
-logs/
+# logs/
 models/
 sft_results/
 tests/
 transformation/
+datasets/
 
-*.json
+# *.json
 Dockerfile
 
 

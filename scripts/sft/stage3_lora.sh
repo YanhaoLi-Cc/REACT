@@ -14,7 +14,7 @@ OUTPUT_DIR="checkpoints/sft/llava-moleculestm-$MODEL_VERSION-sft-trans"
 
 # NUM_GPUS=8
 # deepspeed --num_gpus=$NUM_GPUS scripts/train_model.py \
-CUDA_VISIBLE_DEVICES=0,1,2,3 deepspeed scripts/train_model.py \
+CUDA_VISIBLE_DEVICES=0 deepspeed scripts/train_model.py \
     --model_name_or_path $BASE_LLM_PATH \
     --model_cls $MODEL_CLS \
     --modality_builder molecule_2d \

@@ -1,0 +1,20 @@
+F .
+c1ccccc1 .
+CO .
+
+Br .
+(=O)O)c1ccccc1 .
+(=O)OC(C)(C)C)NCCC .
+.
+
+.
+CCl .
+1
+1
+
+CCO .
+O .
+C)c1ccccc1 .
+CCl)cc1ccccc1 .
+
+.O=C1CCC(=O)N1Br .

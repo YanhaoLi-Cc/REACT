@@ -1,0 +1,92 @@
+[
+    {
+        "id": 0,
+        "molecules": {
+            "selfies": [
+                "[C][C][I]",
+                "[O][=C][Branch1][C][O][C][=C][C][=C][C][=C][Ring1][=Branch1][Br]",
+                "[C][N][Branch1][C][C][C][=O]",
+                "[O]",
+                "[O][=C][Branch1][C][O-1][O]",
+                "[Na+1]"
+            ],
+            "smiles": [
+                "CCI",
+                "O=C(O)c1ccccc1Br",
+                "CN(C)C=O",
+                "O",
+                "O=C([O-])O",
+                "[Na+]"
+            ]
+        },
+        "ground_truth": "CCOC(=O)c1ccccc1Br",
+        "messages": [
+            {
+                "content": "You are a chemist. Now you are given a reaction equation. Please predict the product of the reaction. The reaction equation has the following format:\n```\nreactant1.reactant2. ... .reactantN>>product\n```\nYour task is to predict the structure representation of the product molecule. We provide the SMILES of the reactants.",
+                "role": "system"
+            },
+            {
+                "content": "Predict the product of a chemical reaction with <molecule_2d>.<molecule_2d>.<molecule_2d>.<molecule_2d>.<molecule_2d>.<molecule_2d> as the reactants and reagents.",
+                "role": "user"
+            }
+        ]
+    },
+    {
+        "id": 1,
+        "molecules": {
+            "selfies": [
+                "[O][=C][Branch1][C][Cl][C][=Branch1][C][=O][Cl]",
+                "[O][=C][Branch1][C][O][C][C][C][Branch1][C][F][Branch1][C][F][F]",
+                "[C][N][Branch1][C][C][C][=O]",
+                "[Cl][C][Cl]"
+            ],
+            "smiles": [
+                "O=C(Cl)C(=O)Cl",
+                "O=C(O)CCC(F)(F)F",
+                "CN(C)C=O",
+                "ClCCl"
+            ]
+        },
+        "ground_truth": "O=C(Cl)CCC(F)(F)F",
+        "messages": [
+            {
+                "content": "You are a chemist. Now you are given a reaction equation. Please predict the product of the reaction. The reaction equation has the following format:\n```\nreactant1.reactant2. ... .reactantN>>product\n```\nYour task is to predict the structure representation of the product molecule. We provide the SMILES of the reactants.",
+                "role": "system"
+            },
+            {
+                "content": "Predict the product of a chemical reaction with <molecule_2d>.<molecule_2d>.<molecule_2d>.<molecule_2d> as the reactants and reagents.",
+                "role": "user"
+            }
+        ]
+    },
+    {
+        "id": 2,
+        "molecules": {
+            "selfies": [
+                "[C][C][O][C][=Branch1][C][=O][C][=C][N][C][Branch1][=N][C][=C][C][=C][Branch1][C][Cl][C][=C][Ring1][#Branch1][Cl][=C][Branch1][#C][C][C][=Branch1][C][=O][O][C][Branch1][C][C][Branch1][C][C][C][C][Branch1][C][C][=N][C][Ring2][Ring1][#Branch1][=N][Ring2][Ring1][#Branch2]",
+                "[C][C][C][O][C][Ring1][Branch1]",
+                "[O]",
+                "[O]",
+                "[Li][O]"
+            ],
+            "smiles": [
+                "CCOC(=O)c1cn2c(-c3ccc(Cl)cc3Cl)c(CC(=O)OC(C)(C)C)c(C)nc2n1",
+                "C1CCOC1",
+                "O",
+                "O",
+                "[Li]O"
+            ]
+        },
+        "ground_truth": "Cc1nc2nc(C(=O)O)cn2c(-c2ccc(Cl)cc2Cl)c1CC(=O)OC(C)(C)C",
+        "messages": [
+            {
+                "content": "You are a chemist. Now you are given a reaction equation. Please predict the product of the reaction. The reaction equation has the following format:\n```\nreactant1.reactant2. ... .reactantN>>product\n```\nYour task is to predict the structure representation of the product molecule. We provide the SMILES of the reactants.",
+                "role": "system"
+            },
+            {
+                "content": "Propose a potential product given these reactants and reagents. <molecule_2d>.<molecule_2d>.<molecule_2d>.<molecule_2d>.<molecule_2d>",
+                "role": "user"
+            }
+        ]
+    }
+]

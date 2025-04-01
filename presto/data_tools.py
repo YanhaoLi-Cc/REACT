@@ -80,114 +80,147 @@ def encode_chat(
 
 def encode_dpo_chat(
     item: Dict,
-    tokenizer: transformers.PreTrainedTokenizer, 
+    tokenizer: transformers.PreTrainedTokenizer,
     modalities: List[Modality],
 ) -> Dict:
-    # 获取词汇表大小并添加日志
-    vocab_size = tokenizer.vocab_size
-    logging.info(f"Tokenizer vocab size: {vocab_size}")
-
-    # 辅助函数：确保token id在有效范围内
-    def clamp_token_id(token_id):
-        return min(max(0, token_id), vocab_size - 1)
-
-    def process_sequence(messages):
-        chat_as_string = tokenizer.apply_chat_template(messages, tokenize=False)
+    """
+    更安全的encode_chat版本，为DPO训练设计，添加更多的验证和错误处理
+    """
+    try:
+        messages = list(item.get("messages", []))
+        
+        # 验证messages格式
+        if not messages:
+            raise ValueError("Empty messages list")
+        
+        for msg in messages:
+            if not isinstance(msg, dict):
+                raise ValueError(f"Message is not a dictionary: {type(msg)}")
+            if "role" not in msg:
+                raise ValueError("Message missing 'role' field")
+            if "content" not in msg:
+                raise ValueError("Message missing 'content' field")
+        
+        try:
+            # 尝试应用聊天模板，如果失败则使用简单的格式
+            chat_as_string = tokenizer.apply_chat_template(messages, tokenize=False)
+        except Exception as e:
+            # 如果应用模板失败，使用简单的拼接
+            logging.warning(f"Failed to apply chat template: {str(e)}, using simple format")
+            chat_as_string = " ".join([f"{msg['role']}: {msg['content']}" for msg in messages])
         
         token_to_modality = {m.token: m for m in modalities}
+        modality_token_counts = Counter()
         modality_instance_counts = Counter()
-        instruct_pattern = r"(\[INST\][\s\S]*?\[\/INST\])"
-        pattern = "(" + "|".join(re.escape(m.token) for m in modalities) + ")"
-
-        chat_part = re.split(instruct_pattern, chat_as_string)
+        
+        # 尝试使用模板的正则表达式
+        try:
+            instruct_pattern = r"(\[INST\][\s\S]*?\[\/INST\])"
+            pattern = "(" + "|".join(re.escape(m.token) for m in modalities) + ")"
+            
+            chat_part = re.split(instruct_pattern, chat_as_string)
+        except Exception as e:
+            # 如果正则匹配失败，直接使用整个字符串
+            logging.warning(f"Failed to split chat with regex: {str(e)}")
+            chat_part = [chat_as_string]
+        
         input_ids = []
         labels = []
-
+        
+        # 安全地预处理模态数据
+        data_dict = dict()
+        for m in modalities:
+            try:
+                data_dict[m.name] = m.preprocess_rows([item])[0]
+            except Exception as e:
+                logging.warning(f"Failed to preprocess modality {m.name}: {str(e)}")
+                data_dict[m.name] = []
+        
+        # 处理聊天部分
         for part in chat_part:
-            if "[INST]" in part:
-                is_instruction = True
-            else:
-                is_instruction = False
+            is_instruction = "[INST]" in part if isinstance(part, str) else False
             
-            for subpart in re.split(pattern, part):
-                if not subpart:
-                    continue
-                    
-                if subpart in token_to_modality:
-                    assert is_instruction, "There should be no modality tokens outside of instructions"
-                    m = token_to_modality[subpart]
-                    m_token_width = data_dict[m.name][modality_instance_counts[m.name]][0].shape[0]
-                    modality_instance_counts[m.name] += 1
-                    # 确保模态token_idx在范围内
-                    safe_token_idx = clamp_token_id(m.token_idx)
-                    input_ids.extend([safe_token_idx] * m_token_width)
-                    labels.extend([IGNORE_INDEX] * m_token_width)
-                elif is_instruction:
-                    part_ids = tokenizer(subpart, add_special_tokens=False).input_ids
-                    # 确保常规token在范围内
-                    part_ids = [clamp_token_id(tid) for tid in part_ids]
-                    input_ids.extend(part_ids)
-                    labels.extend([IGNORE_INDEX] * len(part_ids))
+            try:
+                if isinstance(part, str):
+                    subparts = re.split(pattern, part)
                 else:
-                    part_ids = tokenizer(subpart, add_special_tokens=False).input_ids
-                    # 确保常规token在范围内
-                    part_ids = [clamp_token_id(tid) for tid in part_ids]
-                    input_ids.extend(part_ids)
-                    labels.extend(part_ids)
-
+                    subparts = [str(part)]
+                    
+                for subpart in subparts:
+                    if not subpart:
+                        continue
+                        
+                    if subpart in token_to_modality:
+                        m = token_to_modality[subpart]
+                        
+                        # 检查是否有足够的模态实例
+                        if (m.name not in data_dict or 
+                            len(data_dict[m.name]) <= modality_instance_counts[m.name]):
+                            # 如果没有，跳过这个模态
+                            logging.warning(f"Missing modality instance for {m.name}")
+                            continue
+                            
+                        try:
+                            m_token_width = data_dict[m.name][modality_instance_counts[m.name]][0].shape[0]
+                            modality_instance_counts[m.name] += 1
+                            modality_token_counts[m.name] += m_token_width
+                            input_ids.extend([m.token_idx] * m_token_width)
+                            labels.extend([IGNORE_INDEX] * m_token_width)
+                        except Exception as e:
+                            logging.warning(f"Failed to process modality token: {str(e)}")
+                            # 使用一个默认值
+                            input_ids.extend([m.token_idx] * 10)
+                            labels.extend([IGNORE_INDEX] * 10)
+                    elif is_instruction:
+                        part_ids = tokenizer(str(subpart), add_special_tokens=False).input_ids
+                        input_ids.extend(part_ids)
+                        labels.extend([IGNORE_INDEX] * len(part_ids))
+                    else:
+                        part_ids = tokenizer(str(subpart), add_special_tokens=False).input_ids
+                        input_ids.extend(part_ids)
+                        labels.extend(part_ids)
+            except Exception as e:
+                logging.warning(f"Failed to process chat part: {str(e)}")
+                # 对于失败的部分，添加一些占位符token
+                placeholder_ids = tokenizer("Error processing this part.", add_special_tokens=False).input_ids
+                input_ids.extend(placeholder_ids)
+                if is_instruction:
+                    labels.extend([IGNORE_INDEX] * len(placeholder_ids))
+                else:
+                    labels.extend(placeholder_ids)
+        
+        # 确保input_ids和labels非空
+        if not input_ids:
+            input_ids = [tokenizer.pad_token_id]
+        if not labels:
+            labels = [IGNORE_INDEX]
+        
         input_ids = torch.tensor(input_ids, dtype=torch.long)
         labels = torch.tensor(labels, dtype=torch.long)
-        attention_mask = torch.ones_like(input_ids, dtype=torch.bool)
+        attention_mask = torch.ones(len(input_ids), dtype=torch.long)
         
-        # 添加调试信息
-        logging.debug(f"Max token id in sequence: {input_ids.max().item()}")
-        logging.debug(f"Min token id in sequence: {input_ids.min().item()}")
-        logging.debug(f"Sequence length: {len(input_ids)}")
+        result = {
+            "input_ids": input_ids,
+            "labels": labels,
+            "attention_mask": attention_mask,
+        }
         
-        return input_ids, labels, attention_mask
+        # 添加模态数据
+        for m in modalities:
+            if m.name in data_dict:
+                result[m.name] = data_dict[m.name]
+        
+        return result
+    except Exception as e:
+        # 如果发生任何错误，返回一个最小的有效数据
+        logging.error(f"Unhandled error in encode_dpo_chat: {str(e)}")
+        # 确保返回一个有效的attention_mask
+        return {
+            "input_ids": torch.tensor([tokenizer.pad_token_id], dtype=torch.long),
+            "labels": torch.tensor([IGNORE_INDEX], dtype=torch.long),
+            "attention_mask": torch.tensor([1], dtype=torch.long),
+        }
 
-    # 数据验证
-    assert "chosen_messages" in item and "rejected_messages" in item, "Missing messages in item"
-    assert isinstance(item["chosen_messages"], (list, tuple)), "chosen_messages must be a list"
-    assert isinstance(item["rejected_messages"], (list, tuple)), "rejected_messages must be a list"
-
-    # 处理模态数据
-    data_dict = dict()
-    for m in modalities:
-        data_dict[m.name] = m.preprocess_rows([item])[0]
-
-    # 处理chosen和rejected序列
-    chosen_input_ids, chosen_labels, chosen_attention_mask = process_sequence(item["chosen_messages"])
-    rejected_input_ids, rejected_labels, rejected_attention_mask = process_sequence(item["rejected_messages"])
-
-    # 截断处理
-    max_length = tokenizer.model_max_length
-    if max_length:
-        if len(chosen_input_ids) > max_length:
-            chosen_input_ids = chosen_input_ids[:max_length]
-            chosen_labels = chosen_labels[:max_length]
-            chosen_attention_mask = chosen_attention_mask[:max_length]
-        if len(rejected_input_ids) > max_length:
-            rejected_input_ids = rejected_input_ids[:max_length]
-            rejected_labels = rejected_labels[:max_length]
-            rejected_attention_mask = rejected_attention_mask[:max_length]
-
-    # 最终验证
-    assert chosen_input_ids.max() < vocab_size, f"Chosen input_ids contains invalid token: {chosen_input_ids.max()}"
-    assert rejected_input_ids.max() < vocab_size, f"Rejected input_ids contains invalid token: {rejected_input_ids.max()}"
-
-    # 更新数据字典
-    data_dict.update({
-        "chosen_input_ids": chosen_input_ids,
-        "chosen_labels": chosen_labels,
-        "chosen_attention_mask": chosen_attention_mask.float(),
-        "rejected_input_ids": rejected_input_ids,
-        "rejected_labels": rejected_labels,
-        "rejected_attention_mask": rejected_attention_mask.float(),
-    })
-
-    return data_dict
- 
 def encode_chat_phi2(
     item: Dict,
     tokenizer: transformers.PreTrainedTokenizer,

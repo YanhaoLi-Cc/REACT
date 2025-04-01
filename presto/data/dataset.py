@@ -224,180 +224,128 @@ def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer,
         raise ValueError(f"Unknown training mode: {training_args.training_mode}")
 
 
-
-# @dataclass 
-# class DataCollatorForDPODataset:
-#     """Data collator for DPO training"""
-#     tokenizer: transformers.PreTrainedTokenizer
-#     modalities: List[Modality]
-    
-#     def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
-#         # 分别收集chosen和rejected序列
-#         chosen_input_ids = [instance["chosen_input_ids"] for instance in instances]
-#         chosen_labels = [instance["chosen_labels"] for instance in instances]
-#         rejected_input_ids = [instance["rejected_input_ids"] for instance in instances]
-#         rejected_labels = [instance["rejected_labels"] for instance in instances]
-
-#         # Padding处理
-#         chosen_input_ids = torch.nn.utils.rnn.pad_sequence(
-#             chosen_input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id
-#         )
-#         chosen_labels = torch.nn.utils.rnn.pad_sequence(
-#             chosen_labels, batch_first=True, padding_value=IGNORE_INDEX
-#         )
-#         rejected_input_ids = torch.nn.utils.rnn.pad_sequence(
-#             rejected_input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id
-#         )
-#         rejected_labels = torch.nn.utils.rnn.pad_sequence(
-#             rejected_labels, batch_first=True, padding_value=IGNORE_INDEX
-#         )
-        
-#         # 截断处理
-#         max_length = self.tokenizer.model_max_length
-#         chosen_input_ids = chosen_input_ids[:, :max_length]
-#         chosen_labels = chosen_labels[:, :max_length] 
-#         rejected_input_ids = rejected_input_ids[:, :max_length]
-#         rejected_labels = rejected_labels[:, :max_length]
-
-#         batch = {
-#             "chosen_input_ids": chosen_input_ids,
-#             "chosen_labels": chosen_labels,
-#             "chosen_attention_mask": chosen_input_ids.ne(self.tokenizer.pad_token_id),
-#             "rejected_input_ids": rejected_input_ids,
-#             "rejected_labels": rejected_labels,
-#             "rejected_attention_mask": rejected_input_ids.ne(self.tokenizer.pad_token_id),
-#         }
-
-#         # 添加modality相关数据
-#         for m in self.modalities:
-#             batch[m.name] = [instance[m.name] for instance in instances]
-
-#         return batch
-
-@dataclass
-class DPODataCollatorWithPadding:
-    """
-    Custom data collator for DPO training
-    """
-    tokenizer: transformers.PreTrainedTokenizer
-    modalities: List[Modality]
-    max_length: Optional[int] = None
-    pad_to_multiple_of: Optional[int] = None
-    
-    def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
-        batch = {}
-        
-        # 处理文本数据
-        for key in ["chosen_input_ids", "chosen_labels", "chosen_attention_mask",
-                   "rejected_input_ids", "rejected_labels", "rejected_attention_mask"]:
-            if key in features[0]:
-                # 确保所有输入都是tensor
-                sequence = [torch.tensor(f[key]) if not isinstance(f[key], torch.Tensor) else f[key] for f in features]
-                
-                # Padding处理
-                sequence = pad_sequence(
-                    sequence,
-                    batch_first=True,
-                    padding_value=self.tokenizer.pad_token_id if "input_ids" in key 
-                    else (0 if "attention_mask" in key else -100)
-                )
-                
-                # 截断处理
-                if self.max_length:
-                    sequence = sequence[:, :self.max_length]
-                
-                # pad to multiple of
-                if self.pad_to_multiple_of:
-                    seq_length = sequence.size(1)
-                    padding_amount = (self.pad_to_multiple_of - seq_length % self.pad_to_multiple_of) % self.pad_to_multiple_of
-                    if padding_amount > 0:
-                        padding_value = (
-                            self.tokenizer.pad_token_id if "input_ids" in key
-                            else (0 if "attention_mask" in key else -100)
-                        )
-                        padding = torch.ones(sequence.size(0), padding_amount) * padding_value
-                        sequence = torch.cat([sequence, padding.to(sequence.device)], dim=1)
-                
-                # 设置正确的数据类型
-                if "input_ids" in key:
-                    sequence = sequence.long()  # 确保input_ids是长整型
-                elif "attention_mask" in key:
-                    sequence = sequence.bool().float()  # attention_mask转换为布尔值再转浮点
-                elif "labels" in key:
-                    sequence = sequence.long()  # labels也应该是长整型
-                
-                batch[key] = sequence
-        
-        # 处理modality数据
-        for m in self.modalities:
-            if m.name in features[0]:
-                modality_data = []
-                max_len = max(len(f[m.name]) for f in features)
-                
-                for feature in features:
-                    data = feature[m.name]
-                    # Padding处理
-                    if len(data) < max_len:
-                        padded_data = data + [None] * (max_len - len(data))
-                    else:
-                        padded_data = data[:max_len]
-                    modality_data.append(padded_data)
-                
-                batch[m.name] = modality_data
-        
-        return batch
-
-    def _verify_labels(self, labels: torch.Tensor) -> None:
-        """验证标签的有效性"""
-        if labels.dim() != 2:
-            raise ValueError(f"Labels should be 2D but got {labels.dim()}D tensor")
-        if not ((labels >= -100).all() and (labels >= 0).any()):
-            raise ValueError("Labels should be either -100 or positive integers")
-
-@dataclass
-class CustomDPODataCollator(DPODataCollatorWithPadding):
-    """Extends DPODataCollatorWithPadding to handle modalities"""
-    tokenizer: transformers.PreTrainedTokenizer
-    modalities: List[Modality]
-    
-    def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
-        # 首先使用父类的collate方法处理标准DPO数据
-        batch = super().__call__(instances)
-        
-        # 处理modality数据
-        for m in self.modalities:
-            if m.name in instances[0]:
-                modality_data = []
-                max_len = max(len(instance[m.name]) for instance in instances)
-                
-                for instance in instances:
-                    data = instance[m.name]
-                    # Pad if necessary
-                    if len(data) < max_len:
-                        padded_data = data + [None] * (max_len - len(data))
-                    else:
-                        padded_data = data
-                    modality_data.append(padded_data)
-                
-                batch[m.name] = modality_data
-        
-        return batch
-
 @dataclass 
 class DataCollatorForDPODataset:
-    """Data collator for DPO training"""
     tokenizer: transformers.PreTrainedTokenizer
     modalities: List[Modality]
+    skip_modality_processing: bool = True  # 添加标志跳过模态处理
     
     def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
-        collator = DPODataCollatorWithPadding(
-            tokenizer=self.tokenizer,
-            modalities=self.modalities,
-            max_length=self.tokenizer.model_max_length,
-            pad_to_multiple_of=8
-        )
-        return collator(instances)
-    
+        # 收集chosen和rejected的input_ids和labels
+        chosen_input_ids = [instance["chosen_input_ids"] for instance in instances]
+        chosen_labels = [instance["chosen_labels"] for instance in instances]
+        
+        rejected_input_ids = [instance["rejected_input_ids"] for instance in instances]
+        rejected_labels = [instance["rejected_labels"] for instance in instances]
+        
+        # 确保所有实例都有attention_mask
+        chosen_attention_mask = []
+        rejected_attention_mask = []
+        
+        for instance in instances:
+            if "chosen_attention_mask" in instance:
+                chosen_attention_mask.append(instance["chosen_attention_mask"])
+            else:
+                # 如果没有attention_mask，创建一个全1的mask
+                chosen_attention_mask.append(torch.ones_like(instance["chosen_input_ids"]))
+                
+            if "rejected_attention_mask" in instance:
+                rejected_attention_mask.append(instance["rejected_attention_mask"])
+            else:
+                # 如果没有attention_mask，创建一个全1的mask
+                rejected_attention_mask.append(torch.ones_like(instance["rejected_input_ids"]))
+
+        # 计算最大长度，确保chosen和rejected具有相同的长度
+        chosen_max_length = max([len(ids) for ids in chosen_input_ids])
+        rejected_max_length = max([len(ids) for ids in rejected_input_ids])
+        max_length = max(chosen_max_length, rejected_max_length)
+        
+        # Padding处理到统一长度
+        padded_chosen_input_ids = []
+        padded_chosen_labels = []
+        padded_chosen_attention_mask = []
+        padded_rejected_input_ids = []
+        padded_rejected_labels = []
+        padded_rejected_attention_mask = []
+        
+        for i in range(len(instances)):
+            # Padding chosen
+            if len(chosen_input_ids[i]) < max_length:
+                pad_length = max_length - len(chosen_input_ids[i])
+                padded_chosen_input_ids.append(torch.cat([
+                    chosen_input_ids[i], 
+                    torch.full((pad_length,), self.tokenizer.pad_token_id, dtype=chosen_input_ids[i].dtype, device=chosen_input_ids[i].device)
+                ]))
+                padded_chosen_labels.append(torch.cat([
+                    chosen_labels[i], 
+                    torch.full((pad_length,), IGNORE_INDEX, dtype=chosen_labels[i].dtype, device=chosen_labels[i].device)
+                ]))
+                padded_chosen_attention_mask.append(torch.cat([
+                    chosen_attention_mask[i], 
+                    torch.zeros(pad_length, dtype=chosen_attention_mask[i].dtype, device=chosen_attention_mask[i].device)
+                ]))
+            else:
+                padded_chosen_input_ids.append(chosen_input_ids[i][:max_length])
+                padded_chosen_labels.append(chosen_labels[i][:max_length])
+                padded_chosen_attention_mask.append(chosen_attention_mask[i][:max_length])
+            
+            # Padding rejected
+            if len(rejected_input_ids[i]) < max_length:
+                pad_length = max_length - len(rejected_input_ids[i])
+                padded_rejected_input_ids.append(torch.cat([
+                    rejected_input_ids[i], 
+                    torch.full((pad_length,), self.tokenizer.pad_token_id, dtype=rejected_input_ids[i].dtype, device=rejected_input_ids[i].device)
+                ]))
+                padded_rejected_labels.append(torch.cat([
+                    rejected_labels[i], 
+                    torch.full((pad_length,), IGNORE_INDEX, dtype=rejected_labels[i].dtype, device=rejected_labels[i].device)
+                ]))
+                padded_rejected_attention_mask.append(torch.cat([
+                    rejected_attention_mask[i], 
+                    torch.zeros(pad_length, dtype=rejected_attention_mask[i].dtype, device=rejected_attention_mask[i].device)
+                ]))
+            else:
+                padded_rejected_input_ids.append(rejected_input_ids[i][:max_length])
+                padded_rejected_labels.append(rejected_labels[i][:max_length])
+                padded_rejected_attention_mask.append(rejected_attention_mask[i][:max_length])
+        
+        # 转换为batch张量
+        chosen_input_ids_batch = torch.stack(padded_chosen_input_ids)
+        chosen_labels_batch = torch.stack(padded_chosen_labels)
+        chosen_attention_mask_batch = torch.stack(padded_chosen_attention_mask)
+        
+        rejected_input_ids_batch = torch.stack(padded_rejected_input_ids)
+        rejected_labels_batch = torch.stack(padded_rejected_labels)
+        rejected_attention_mask_batch = torch.stack(padded_rejected_attention_mask)
+        
+        # 截断处理
+        max_model_length = self.tokenizer.model_max_length
+        if max_model_length and max_length > max_model_length:
+            chosen_input_ids_batch = chosen_input_ids_batch[:, :max_model_length]
+            chosen_labels_batch = chosen_labels_batch[:, :max_model_length]
+            chosen_attention_mask_batch = chosen_attention_mask_batch[:, :max_model_length]
+            rejected_input_ids_batch = rejected_input_ids_batch[:, :max_model_length]
+            rejected_labels_batch = rejected_labels_batch[:, :max_model_length]
+            rejected_attention_mask_batch = rejected_attention_mask_batch[:, :max_model_length]
+
+        batch = {
+            "input_ids": torch.cat([chosen_input_ids_batch, rejected_input_ids_batch], dim=0),
+            "labels": torch.cat([chosen_labels_batch, rejected_labels_batch], dim=0),
+            "attention_mask": torch.cat([chosen_attention_mask_batch, rejected_attention_mask_batch], dim=0),
+        }
+
+        # 添加modality相关数据（仅当不跳过模态处理时）
+        if not self.skip_modality_processing:
+            for m in self.modalities:
+                chosen_key = f"chosen_{m.name}"
+                rejected_key = f"rejected_{m.name}"
+                if chosen_key in instances[0] and rejected_key in instances[0]:
+                    batch[m.name] = (
+                        [instance[chosen_key] for instance in instances] + 
+                        [instance[rejected_key] for instance in instances]
+                    )
+
+        return batch
 
     def _validate_batch(self, batch):
         """验证batch数据的有效性"""
@@ -410,16 +358,18 @@ class DataCollatorForDPODataset:
         # 检查attention mask的维度和类型
         assert batch["chosen_attention_mask"].shape == chosen_shape, \
             "Attention mask shape mismatch"
-        assert batch["chosen_attention_mask"].dtype == torch.bool, \
-            "Attention mask should be boolean"
+        assert batch["rejected_attention_mask"].shape == rejected_shape, \
+            "Attention mask shape mismatch"
         
         # 检查input_ids的有效性
         assert (batch["chosen_input_ids"] >= 0).all(), "Invalid input ids found"
         assert (batch["rejected_input_ids"] >= 0).all(), "Invalid input ids found"
 
         # 检查labels的有效性
-        valid_labels = (batch["chosen_labels"] == IGNORE_INDEX) | (batch["chosen_labels"] >= 0)
-        assert valid_labels.all(), "Invalid labels found"
+        valid_chosen_labels = (batch["chosen_labels"] == IGNORE_INDEX) | (batch["chosen_labels"] >= 0)
+        valid_rejected_labels = (batch["rejected_labels"] == IGNORE_INDEX) | (batch["rejected_labels"] >= 0)
+        assert valid_chosen_labels.all(), "Invalid chosen labels found"
+        assert valid_rejected_labels.all(), "Invalid rejected labels found"
 
     
 class LMMDataset(TorchDataset):
@@ -472,32 +422,152 @@ class LMMInterleavedDataset(LMMDataset):
 
 class DPODataset(LMMDataset):
     """Dataset for Direct Preference Optimization"""
-    def __getitem__(self, i) -> Dict:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._validate_dataset()
+        self.skip_modality_processing = True  # 添加标志跳过模态处理
+        
+    def _validate_dataset(self):
+        """验证数据集格式是否符合DPO要求"""
+        required_fields = ["chosen_messages", "rejected_messages"]
+        for i, item in enumerate(self.dataset):
+            missing_fields = [field for field in required_fields if field not in item]
+            if missing_fields:
+                raise ValueError(f"Item at index {i} is missing required fields: {missing_fields}")
+            if not isinstance(item["chosen_messages"], list) or not isinstance(item["rejected_messages"], list):
+                raise ValueError(f"Item at index {i} contains non-list values for messages fields")
+                
+    def __getitem__(self, i, retry_count=0) -> Dict:
         try:
             item = self.dataset[i]
-            encoded = encode_dpo_chat(item, self.tokenizer, self.modalities)
+            
+            # 分别为chosen和rejected创建对话数据
+            chosen_item = {
+                "messages": item["chosen_messages"],
+                "molecules": item.get("molecules", {})
+            }
+            rejected_item = {
+                "messages": item["rejected_messages"],
+                "molecules": item.get("molecules", {})
+            }
+            
+            if self.skip_modality_processing:
+                # DPO模式：直接替换分子标记为SMILES字符串
+                chosen_encoded = self._process_text_only(chosen_item)
+                rejected_encoded = self._process_text_only(rejected_item)
+            else:
+                # 使用原有的多模态数据处理 (备用)
+                chosen_encoded = encode_dpo_chat(chosen_item, self.tokenizer, self.modalities)
+                rejected_encoded = encode_dpo_chat(rejected_item, self.tokenizer, self.modalities)
             
             # 构建DPO所需的格式
             result = {
-                "chosen_input_ids": encoded["chosen_input_ids"],
-                "chosen_labels": encoded["chosen_labels"],
-                "chosen_attention_mask": encoded["chosen_input_ids"].ne(self.tokenizer.pad_token_id),
-                "rejected_input_ids": encoded["rejected_input_ids"],
-                "rejected_labels": encoded["rejected_labels"],
-                "rejected_attention_mask": encoded["rejected_input_ids"].ne(self.tokenizer.pad_token_id),
+                "chosen_input_ids": chosen_encoded["input_ids"],
+                "chosen_labels": chosen_encoded["labels"],
+                "chosen_attention_mask": chosen_encoded["attention_mask"],
+                "rejected_input_ids": rejected_encoded["input_ids"],
+                "rejected_labels": rejected_encoded["labels"],
+                "rejected_attention_mask": rejected_encoded["attention_mask"],
             }
             
-            # 添加modality数据
-            for m in self.modalities:
-                if m.name in encoded:
-                    result[m.name] = encoded[m.name]
+            # 如果不跳过模态处理，添加模态数据（备用）
+            if not self.skip_modality_processing:
+                for m in self.modalities:
+                    if m.name in chosen_encoded:
+                        result[f"chosen_{m.name}"] = chosen_encoded[m.name]
+                    if m.name in rejected_encoded:
+                        result[f"rejected_{m.name}"] = rejected_encoded[m.name]
             
             return result
             
         except Exception as e:
+            # 限制重试次数，防止无限递归
+            if retry_count >= 5:
+                logging.error(f"Failed to get valid sample after 5 retries, returning dummy data")
+                # 返回一个简单的占位数据
+                return self._create_dummy_data()
+                
             new_i = i + 1 if i + 1 < len(self) else 0
             logging.error(f"Error encoding DPO data: {e} index={i} trying index={new_i}")
-            return self.__getitem__(new_i)
+            return self.__getitem__(new_i, retry_count + 1)
+    
+    def _process_text_only(self, item):
+        """处理纯文本数据，将分子标记替换为SMILES字符串"""
+        try:
+            messages = list(item.get("messages", []))
+            molecules = item.get("molecules", {}).get("smiles", [])
+            
+            # 创建一个新的消息列表，替换分子标记
+            processed_messages = []
+            for msg in messages:
+                if not isinstance(msg, dict) or "content" not in msg or "role" not in msg:
+                    processed_messages.append(msg)
+                    continue
+                
+                content = msg["content"]
+                # 替换<molecule_2d>标记为实际的SMILES字符串
+                for i, smile in enumerate(molecules):
+                    placeholder = "<molecule_2d>"
+                    if placeholder in content:
+                        content = content.replace(placeholder, smile, 1)
+                
+                processed_messages.append({
+                    "role": msg["role"],
+                    "content": content
+                })
+            
+            # 使用处理后的消息列表
+            chat_text = self.tokenizer.apply_chat_template(
+                processed_messages, 
+                tokenize=False, 
+                add_generation_prompt=False
+            )
+            
+            # 编码为模型输入
+            encoded = self.tokenizer(
+                chat_text,
+                padding=False,
+                truncation=True,
+                max_length=self.tokenizer.model_max_length,
+                return_tensors=None
+            )
+            
+            input_ids = torch.tensor(encoded["input_ids"], dtype=torch.long)
+            attention_mask = torch.tensor(encoded["attention_mask"], dtype=torch.long)
+            # 对于自回归训练，标签与输入相同
+            labels = input_ids.clone()
+            
+            return {
+                "input_ids": input_ids,
+                "labels": labels,
+                "attention_mask": attention_mask,
+            }
+            
+        except Exception as e:
+            logging.error(f"Error in text-only processing: {str(e)}")
+            # 返回一个最小有效数据
+            return {
+                "input_ids": torch.tensor([self.tokenizer.pad_token_id], dtype=torch.long),
+                "labels": torch.tensor([IGNORE_INDEX], dtype=torch.long),
+                "attention_mask": torch.tensor([1], dtype=torch.long),
+            }
+            
+    def _create_dummy_data(self):
+        """创建一个最小的有效数据，作为失败情况的后备"""
+        # 创建最小长度为1的张量
+        input_ids = torch.tensor([self.tokenizer.pad_token_id], dtype=torch.long)
+        attention_mask = torch.tensor([1], dtype=torch.long)
+        labels = torch.tensor([IGNORE_INDEX], dtype=torch.long)
+        
+        # 为chosen和rejected返回相同结构的数据，确保长度一致
+        return {
+            "chosen_input_ids": input_ids.clone(),
+            "chosen_labels": labels.clone(),
+            "chosen_attention_mask": attention_mask.clone(),
+            "rejected_input_ids": input_ids.clone(),
+            "rejected_labels": labels.clone(),
+            "rejected_attention_mask": attention_mask.clone(),
+        }
 
     def _validate_encoded_data(self, encoded: Dict):
         """验证编码数据的有效性"""
@@ -509,8 +579,12 @@ class DPODataset(LMMDataset):
         
         # 检查modality数据
         for m in self.modalities:
-            assert m.name in encoded, f"Missing modality data: {m.name}"
-            assert isinstance(encoded[m.name], list), f"{m.name} must be a list"
+            chosen_key = f"chosen_{m.name}"
+            rejected_key = f"rejected_{m.name}"
+            if chosen_key in encoded:
+                assert isinstance(encoded[chosen_key], list), f"{chosen_key} must be a list"
+            if rejected_key in encoded:
+                assert isinstance(encoded[rejected_key], list), f"{rejected_key} must be a list"
 
 
 class LMMConcatDataset(ConcatDataset):
@@ -794,6 +868,16 @@ _register_mixture(
     mixture_name = "text_only",
     dataset_names = {"i2s": 1.0, "i2f": 1.0},
 )
+
+# Register DPO datasets
+_register_dataset("forward_reaction_dpo", DatasetType.CHAT, 
+                 train_path="/home/liyanhao/chemllm/REACT/logs/full/forward_reaction_prediction/epoch-/dpo_dataset.json",
+                 eval_path="/home/liyanhao/chemllm/REACT/logs/full/forward_reaction_prediction/epoch-/dpo_dataset.json")
+
+# Register the DPO mixture
+_register_mixture("dpo_mixture", {
+    "forward_reaction_dpo": 1.0,
+})
 
 # if __name__ == "__main__":
 #     # from presto.data import make_supervised_data_module

@@ -1,0 +1,46 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Train Model Debug",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/train_model.py",
+            "args": [
+                "--model_name_or_path", "/home/liyanhao/chemllm/REACT/checkpoints/stage2/llava-moleculestm-phi-2-pretrain_all_trans-new",
+                "--model_cls", "PhiLMMForCausalLM",
+                "--modality_builder", "molecule_2d",
+                "--data_mixture", "sft_subset",
+                "--output_dir", "checkpoints/sft/llava-moleculestm-phi-2-sft-trans",
+                "--lora_enable", "True",
+                "--bf16", "True",
+                "--tf32", "True",
+                "--num_train_epochs", "1",
+                "--gradient_checkpointing", "True",
+                "--per_device_train_batch_size", "8",
+                "--per_device_eval_batch_size", "4",
+                "--gradient_accumulation_steps", "2",
+                "--model_max_length", "2048",
+                "--evaluation_strategy", "no",
+                "--save_strategy", "epoch",
+                "--save_total_limit", "5",
+                "--learning_rate", "8e-5",
+                "--weight_decay", "0.",
+                "--warmup_ratio", "0.03",
+                "--lr_scheduler_type", "cosine",
+                "--dataloader_num_workers", "2",
+                "--logging_steps", "1",
+                "--report_to", "none",
+                "--deepspeed", "configs/zero2.json"
+            ],
+            "env": {
+                "MOLECULE_2D_PATH": "/home/liyanhao/chemllm/REACT/models/MoleculeSTM",
+                "HF_HOME": "/home/liyanhao/huggingface_cache",
+                "WANDB_API_KEY": "d82b836e8b00f02e07f039b2743a7896cbe0c3b9",
+                "CUDA_VISIBLE_DEVICES": "3"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": false
+        }
+    ]
+}
